@@ -110,6 +110,7 @@
         const player2 = document.getElementById("player2");
         const arena = document.getElementById("arena");
         const status = document.getElementById("status");
+        const socket = new WebSocket("wss://tu-proyecto.onrender.com");
 
         let myPlayerId;
         let otherPlayer;
