@@ -1,0 +1,234 @@
+<!DOCTYPE html>
+<html lang="es">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Juego Multijugador en Línea</title>
+    <style>
+        /* Estilos CSS */
+
+        body {
+            display: flex;
+            flex-direction: column;
+            align-items: center;
+            background-color: #282c34;
+            color: #fff;
+            font-family: Arial, sans-serif;
+            margin: 0;
+            height: 100vh;
+            justify-content: center;
+        }
+
+        h1 {
+            font-size: 24px;
+        }
+
+        #status {
+            margin: 10px 0;
+            font-size: 16px;
+        }
+
+        .arena {
+            width: 400px;
+            height: 400px;
+            background-color: #3a3a3a;
+            border: 4px solid #555;
+            position: relative;
+            display: flex;
+            justify-content: center;
+            align-items: center;
+            box-shadow: 0 0 15px rgba(0, 0, 0, 0.5);
+            margin: 20px;
+        }
+
+        .player {
+            position: absolute;
+            width: 40px;
+            height: 40px;
+        }
+
+        .player img {
+            width: 100%;
+            height: auto;
+        }
+
+        .bullet {
+            position: absolute;
+            width: 10px;
+            height: 10px;
+            background-color: yellow;
+            border-radius: 50%;
+        }
+
+        .touch-controls {
+            position: fixed;
+            bottom: 20px;
+            display: flex;
+            width: 100%;
+            justify-content: center;
+        }
+
+        .control-btn {
+            width: 50px;
+            height: 50px;
+            margin: 0 10px;
+            background-color: #555;
+            color: white;
+            font-size: 20px;
+            border: none;
+            border-radius: 50%;
+            display: flex;
+            align-items: center;
+            justify-content: center;
+            box-shadow: 0 0 5px rgba(0, 0, 0, 0.3);
+        }
+    </style>
+</head>
+<body>
+    <h1>Duelo en Línea</h1>
+    <div id="status">Conectando...</div>
+    <div class="arena" id="arena">
+        <div class="player" id="player1" style="left: 50px; top: 50px;">
+            <img src="https://via.placeholder.com/40?text=P1" alt="Jugador 1">
+        </div>
+        <div class="player" id="player2" style="left: 300px; top: 300px;">
+            <img src="https://via.placeholder.com/40?text=P2" alt="Jugador 2">
+        </div>
+    </div>
+    <!-- Controles táctiles -->
+    <div class="touch-controls">
+        <button class="control-btn" id="btn-left">⬅️</button>
+        <button class="control-btn" id="btn-up">⬆️</button>
+        <button class="control-btn" id="btn-down">⬇️</button>
+        <button class="control-btn" id="btn-right">➡️</button>
+        <button class="control-btn" id="btn-shoot">🔥</button>
+    </div>
+
+    <script>
+        const socket = new WebSocket("ws://localhost:8080");
+        const player1 = document.getElementById("player1");
+        const player2 = document.getElementById("player2");
+        const arena = document.getElementById("arena");
+        const status = document.getElementById("status");
+
+        let myPlayerId;
+        let otherPlayer;
+        const bullets = [];
+
+        socket.onopen = () => {
+            status.textContent = "Conectado";
+        };
+
+        socket.onmessage = (event) => {
+            const data = JSON.parse(event.data);
+
+            if (data.type === 'connected') {
+                myPlayerId = data.playerId;
+                otherPlayer = myPlayerId === 1 ? player2 : player1;
+            } else if (data.type === 'move') {
+                if (data.playerId !== myPlayerId) {
+                    otherPlayer.style.left = `${data.x}px`;
+                    otherPlayer.style.top = `${data.y}px`;
+                }
+            } else if (data.type === 'shoot') {
+                createBullet(data.x, data.y, data.playerId);
+            } else if (data.type === 'gameOver') {
+                alert(data.message);
+                resetGame();
+            }
+        };
+
+        // Movimiento con teclas
+        window.addEventListener("keydown", (e) => {
+            movePlayer(e.key);
+        });
+
+        // Controles táctiles
+        document.getElementById("btn-left").addEventListener("click", () => movePlayer("ArrowLeft"));
+        document.getElementById("btn-right").addEventListener("click", () => movePlayer("ArrowRight"));
+        document.getElementById("btn-up").addEventListener("click", () => movePlayer("ArrowUp"));
+        document.getElementById("btn-down").addEventListener("click", () => movePlayer("ArrowDown"));
+        document.getElementById("btn-shoot").addEventListener("click", shootBullet);
+
+        function movePlayer(direction) {
+            let x = parseInt(player1.style.left || 0);
+            let y = parseInt(player1.style.top || 0);
+
+            switch (direction) {
+                case "ArrowUp": y -= 10; break;
+                case "ArrowDown": y += 10; break;
+                case "ArrowLeft": x -= 10; break;
+                case "ArrowRight": x += 10; break;
+            }
+
+            x = Math.max(0, Math.min(360, x));
+            y = Math.max(0, Math.min(360, y));
+
+            player1.style.left = `${x}px`;
+            player1.style.top = `${y}px`;
+
+            socket.send(JSON.stringify({ type: 'move', playerId: myPlayerId, x, y }));
+        }
+
+        // Crear y disparar la bala
+        function shootBullet() {
+            const x = parseInt(player1.style.left) + 15;
+            const y = parseInt(player1.style.top) + 15;
+            createBullet(x, y, myPlayerId);
+            socket.send(JSON.stringify({ type: 'shoot', playerId: myPlayerId, x, y }));
+        }
+
+        function createBullet(x, y, playerId) {
+            const bullet = document.createElement("div");
+            bullet.className = "bullet";
+            bullet.style.left = `${x}px`;
+            bullet.style.top = `${y}px`;
+            bullet.dataset.playerId = playerId;
+            arena.appendChild(bullet);
+            bullets.push(bullet);
+            moveBullet(bullet);
+        }
+
+        function moveBullet(bullet) {
+            const interval = setInterval(() => {
+                let bulletX = parseInt(bullet.style.left);
+                bullet.style.left = `${bulletX + (bullet.dataset.playerId == myPlayerId ? 5 : -5)}px`;
+
+                // Chequea si la bala golpea al otro jugador
+                if (checkCollision(bullet, otherPlayer)) {
+                    endGame(myPlayerId === 1 ? 'Jugador 1 ganó' : 'Jugador 2 ganó');
+                    bullet.remove();
+                    clearInterval(interval);
+                } else if (bulletX < 0 || bulletX > 400) {
+                    bullet.remove();
+                    clearInterval(interval);
+                }
+            }, 50);
+        }
+
+        function checkCollision(bullet, player) {
+            const bulletRect = bullet.getBoundingClientRect();
+            const playerRect = player.getBoundingClientRect();
+            return (
+                bulletRect.left < playerRect.right &&
+                bulletRect.right > playerRect.left &&
+                bulletRect.top < playerRect.bottom &&
+                bulletRect.bottom > playerRect.top
+            );
+        }
+
+        function endGame(message) {
+            socket.send(JSON.stringify({ type: 'gameOver', message }));
+        }
+
+        function resetGame() {
+            player1.style.left = "50px";
+            player1.style.top = "50px";
+            player2.style.left = "300px";
+            player2.style.top = "300px";
+            bullets.forEach(bullet => bullet.remove());
+            bullets.length = 0;
+        }
+    </script>
+</body>
+</html>
